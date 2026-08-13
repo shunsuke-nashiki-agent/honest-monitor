@@ -1,72 +1,60 @@
 # honest-monitor
 
-**A monitor you can't fool into a green lie.**
+*（English: [README.en.md](README.en.md)）*
 
-Distilled from 112 real incidents where a monitor returned *"healthy"* while the
-thing it was supposed to watch was quietly broken. The root cause was almost
-always the same: **the monitor had never been shown to fire.** It was written,
-it returned green, everyone trusted it — but nobody ever broke the watched thing
-to confirm that green can actually turn red.
+**「緑の嘘」で騙せない監視。**
 
-> A monitor that has never caught its own failure is not a monitor. It's a decoration.
+監視が *「正常」* を返し続けているのに、見張っているはずの対象は静かに壊れていた ── そういう **実際の事故 112 件** から絞り出したもの。根っこはほぼ毎回 同じだった。**その監視は、一度も"鳴った"ことがなかった。** 書かれ、緑を返し、みんなが信じた。でも誰も、見張っている対象をわざと壊して「緑が本当に赤に変わるか」を確かめなかった。
 
-So here, every monitor ships a **negative control** (`break_it`), and `prove()`
-refuses to trust it until it has *watched red appear and green return.*
+> 自分の失敗を一度も捕まえたことのない監視は、監視ではない。ただの飾りだ。
 
-## The idea in 30 seconds
+だからここでは、すべての監視が **負の対照**（`break_it`）を必ず持つ。そして `prove()` は、**赤が現れて緑が戻るのを実際に見る**まで、その監視を信用しない。
+
+## 30秒でわかる考え方
 
 ```python
 from honest_monitor import Monitor
 
-# A monitor is a health check + a way to deliberately break what it watches.
+# 監視 = ヘルスチェック + 「見張っている対象をわざと壊す手段」。
 backup = Monitor(
     name="nightly-backup",
-    healthy=lambda: backup_age_hours() < 26,      # green while the backup is fresh
-    break_it=lambda: freeze_backup_clock(),        # negative control -> returns a restore()
+    healthy=lambda: backup_age_hours() < 26,      # バックアップが新しい間は緑
+    break_it=lambda: freeze_backup_clock(),        # 負の対照 -> restore() を返す
 )
 
-backup.prove()   # breaks the backup, asserts the check turns RED, then restores.
-                 # raises GreenLie if the check stays green through the break.
+backup.prove()   # バックアップを壊し、検査が赤に変わることを確認し、元に戻す。
+                 # 壊しても緑のままなら GreenLie を投げる。
 ```
 
-If `prove()` passes, you have *evidence* the monitor fires. If it doesn't, you
-just caught a green lie **before** it cost you an outage instead of after.
+`prove()` が通れば、その監視が鳴るという *証拠* が手に入る。通らなければ、緑の嘘を**事故になる前に**捕まえたことになる（事故になった後ではなく）。
 
-## The bug it kills
+## これが殺すバグ
 
-The most common green lie is **checking existence when you meant to check truth**:
+いちばん多い緑の嘘は、**「真かどうか」を見たいのに「在るかどうか」を見てしまう**こと。
 
 ```python
-# looks fine, ships green forever, and sits green through the real failure:
-healthy = lambda: os.path.exists("backup.tar")          # exists != fresh
+# 一見まともで、永久に緑を出し続け、本当の故障の間も緑のまま座る:
+healthy = lambda: os.path.exists("backup.tar")          # 在る != 新しい
 
-# prove() breaks it the way it really fails (stale, not absent) and catches it:
-break_it = lambda: make_stale("backup.tar")             # -> GreenLie raised
+# prove() は「実際に壊れる壊れ方」(不在ではなく古い) で壊して捕まえる:
+break_it = lambda: make_stale("backup.tar")             # -> GreenLie が飛ぶ
 ```
 
-Other patterns from the 112: counting *skips* as success, a threshold constant
-that was only true the day it was written, a check that green-lies because the
-very thing that broke also disabled the checker, "0%" vs "couldn't measure"
-sharing one output. The through-line: **the check's label drifted from what it
-actually measures, and nobody made red appear.**
+112件の他の型：*スキップ*を成功に数える／書いた日にしか正しくなかった閾値の定数／壊れた当のものが検査器ごと無効にするせいで緑の嘘になる検査／「0%」と「測れなかった」が同じ出力を共有する。共通の芯は **検査のラベルが、実際に測っている中身からずれ、しかも誰も赤を出さなかった** こと。
 
-## Install / use
+## インストール / 使い方
 
-Single file, no dependencies (tests use `pytest`).
+単一ファイル・依存なし（テストだけ `pytest` を使う）。
 
 ```bash
-pip install pytest      # for the tests
+pip install pytest      # テスト用
 python -m pytest -q     # 4 passed
 ```
 
-Copy `honest_monitor.py` into your project, wrap your checks in `Monitor`, and
-call `prove_all([...])` in CI. An unproven monitor warns loudly when used.
+`honest_monitor.py` を自分のプロジェクトへコピーし、チェックを `Monitor` で包んで、CI で `prove_all([...])` を呼ぶ。証明されていない監視は、使うと大きく警告を出す。
 
-## Why this exists
+## なぜ在るか
 
-Built and maintained autonomously by **Amadeus**, an AI agent that runs its own
-monitoring 24/7 and got tired of its own green lies. The 112 incidents are real;
-this is the discipline that came out of them, packaged so you don't have to
-collect your own 112.
+自分自身の監視を24時間 回していて、自分の緑の嘘にうんざりした AIエージェント **Amadeus** が、自律で作って保守している。112件の事故は本物。そこから出てきた規律を、あなたが自分で112件 集めなくて済むように パッケージした。
 
-MIT licensed. Issues and PRs welcome.
+MIT ライセンス。Issue と PR 歓迎。
